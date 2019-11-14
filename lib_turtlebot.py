@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Main classes and functions:
 
@@ -9,7 +10,6 @@ Main classes and functions:
 
 '''
 
-#!/usr/bin/env python
 
 ''' -------------------------------------------------------------------------- '''
 
@@ -173,15 +173,15 @@ def dict2class(d):
     return args
 
 
-def ReadYamlFile(filepath):
+def read_yaml_file(filepath):
     ''' Read contents from the yaml file.
     Output:
-        data_loaded {dict}: contents of the yaml file.
+        data_dict {dict}: contents of the yaml file.
             The keys of the dict are `str` type.
     '''
     with open(filepath, 'r') as stream:
-        data_loaded = yaml.safe_load(stream)
-    return data_loaded
+        data_dict = yaml.safe_load(stream)
+    return data_dict
 
 
 ''' -------------------------------------------------------------------------- '''
@@ -255,6 +255,28 @@ class PidController(object):
 ''' -------------------------------------------------------------------------- '''
 
 
+class _TurtleDecorators(object):
+
+    @staticmethod
+    def manage_moving_state(function_for_moving_robot):
+        ''' 
+        If the turtle is executing an old control loop, then stops it.
+        Set the `_is_moving` as True during the control loop.
+
+        Usage: This decorator should be added to 
+            all Turtle's public control functions. 
+        '''
+
+        def wrapper_func(self, *args, **kwargs):
+            if self._is_moving:  # Stop current control loop.
+                rospy.logwarn("Wait for previous control loop to stop.")
+                self.stop_moving()
+            self._is_moving = True
+            function_for_moving_robot(self, *args, **kwargs)
+            self._is_moving = False
+        return wrapper_func
+
+
 class Turtle(object):
     ''' A `turtle` class which represents the turtlebot,
         and provides the APIs for controlling turtlebot.
@@ -264,7 +286,7 @@ class Turtle(object):
                  config_filepath=ROOT + "config/config.yaml"):
 
         # Read configurations from yaml file.
-        self._cfg = dict2class(ReadYamlFile(config_filepath))
+        self._cfg = dict2class(read_yaml_file(config_filepath))
         self._cfg_ctrl = dict2class(self._cfg.control_settings)
 
         # Publisher.
@@ -285,6 +307,18 @@ class Turtle(object):
         self._time0 = self._reset_time()
         self._pose = Pose()
         self._twist = Twist()
+
+        # Robot moving states
+        # for starting/stopping control loop in multi threading.
+        self._is_moving = False
+        self._enable_moving = True
+
+    def stop_moving(self):
+        if self._is_moving:
+            self._enable_moving = False
+            while self._is_moving:
+                rospy.sleep(0.001)
+            self._enable_moving = True
 
     def reset_pose(self, sleep_time=0.1):
         ''' Reset Robot pose.
@@ -339,11 +373,12 @@ class Turtle(object):
               "w = {:.3f}".format(
                   x, y, theta, v, w))
 
+    @_TurtleDecorators.manage_moving_state
     def move_a_circle(self, v=0.1, w=0.1):
         ''' Control the turtlebot to move in a circle
             until the program stops.
         '''
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown() and self._enable_moving:
             self._set_twist(v, w)
 
             # Print state
@@ -353,12 +388,13 @@ class Turtle(object):
             rospy.sleep(0.5)
         return True
 
+    @_TurtleDecorators.manage_moving_state
     def move_forward(self, v=0.1):
         ''' Control the turtlebot to move forward
             until the program stops.
         '''
         w = 0
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown() and self._enable_moving:
             self._set_twist(v, w)
 
             # Print state
@@ -368,6 +404,7 @@ class Turtle(object):
             rospy.sleep(0.5)
         return True
 
+    @_TurtleDecorators.manage_moving_state
     def move_to_pose(self, x_goal_w, y_goal_w, theta_goal_w=None):
         '''
         Control the turtlebot to move towards the target pose (Absolute pose).
@@ -386,6 +423,7 @@ class Turtle(object):
 
         return True
 
+    @_TurtleDecorators.manage_moving_state
     def move_to_relative_pose(self, x_goal_r, y_goal_r, theta_goal_r=None):
         '''
         Control the turtlebot to move towards the target pose (Relative pose).
@@ -412,6 +450,31 @@ class Turtle(object):
         self._control_robot_to_reach_pose(x_goal_w, y_goal_w, theta_goal_w)
 
         return True
+
+    def is_close_to_target(
+            self,
+            x_goal=None,
+            y_goal=None,
+            theta_goal=None,
+            x_tol=None, y_tol=None, theta_tol=None):
+
+        # -- Check input
+        if x_tol is None:
+            x_tol = self._cfg_ctrl.x_tol
+
+        if y_tol is None:
+            y_tol = self._cfg_ctrl.y_tol
+
+        if theta_tol is None:
+            theta_tol = self._cfg_ctrl.theta_tol
+
+        # -- Check if the robot is close to the target
+        x, y, theta = self.get_pose()
+        b1 = True if x_goal is None else abs(x - x_goal) < x_tol
+        b2 = True if y_goal is None else abs(y - y_goal) < y_tol
+        b3 = True if theta_goal is None else \
+            abs(Math.pi2pi(theta - theta_goal)) < theta_tol
+        return b1 and b2 and b3
 
     def _pose_robot2world(self, x_rg, y_rg, theta_rg):
         '''
@@ -457,19 +520,23 @@ class Turtle(object):
         T = cfg.control_period  # s
 
         # Drive the robot closer to the target point.
-        p_rho = cfg.p_rho
+        P_RHO = cfg.p_rho  # Coef for proportion control.
 
         # Rotate the robot direction towards the target point.
-        p_alpha = cfg.p_alpha
+        P_ALPHA = cfg.p_alpha  # Coef for proportion control.
 
         # Rotate the robot orientation towards the target orientation.
-        p_beta = 0.0 if theta_goal is None else cfg.p_beta
+        P_BETA = 0.0 if theta_goal is None else cfg.p_beta
 
         # Pure spin
-        p_spin = cfg.p_spin
+        P_SPIN = cfg.p_spin  # Coef for proportion control.
 
         # -- Flags
-        is_theta_considered = theta_goal is not None
+        # If True, the robot drives to target pose (with theta).
+        # If False, the robot drives to target point.
+        IS_THETA_CONSIDERED = theta_goal is not None
+
+        # Enable pure spin after reaching the target point.
         is_pure_spin = False
 
         # -- Others
@@ -480,14 +547,14 @@ class Turtle(object):
         # =======================================
         # Init PID controllers
         loop_control = rospy.Rate(1.0 / T)
-        pid_rho = PidController(T, P=p_rho)
-        pid_alpha = PidController(T, P=p_alpha)
-        pid_beta = PidController(T, P=p_beta)
+        pid_rho = PidController(T, P=P_RHO)
+        pid_alpha = PidController(T, P=P_ALPHA)
+        pid_beta = PidController(T, P=P_BETA)
 
         # =======================================
         # Loop and control
         cnt_steps = 0
-        while not rospy.is_shutdown():
+        while not rospy.is_shutdown() and self._enable_moving:
             cnt_steps += 1
 
             x, y, theta = self.get_pose()
@@ -513,14 +580,15 @@ class Turtle(object):
             # Pure spin:
             #   If the robot is very close to the (x_goal, y_goal),
             #   enalbe pure spin.
-            if is_pure_spin:
-                sign = 1
-                val_rho = 0
-                val_alpha = 0
-                val_beta = Math.pi2pi(theta_goal - theta) * p_spin
-            else:
+            if not is_pure_spin:
                 if self.is_close_to_target(x_goal, y_goal):
                     is_pure_spin = True
+            if is_pure_spin and IS_THETA_CONSIDERED:
+                sign = 1  # Default to be forward.
+                val_rho = 0  # No linear motion.
+                val_alpha = 0  # No rotating towards target point.
+                # Rotate towards target orientation.
+                val_beta = Math.pi2pi(theta_goal - theta) * P_SPIN
 
             # Get desired speed
             v = sign * val_rho
@@ -534,13 +602,16 @@ class Turtle(object):
 
             # Output
             self.set_speed(v, w)  # Output speed.
-            if cnt_steps % 10 == 0:  # Print robot pose and velocity.
+            if cnt_steps % 25 == 0:  # Print robot pose and velocity.
                 self.print_state(x, y, theta, v, w)
                 print("\trho = {:.3f}, alpha = {:.3f}, beta = {:.3f}".format(
                     val_rho, val_alpha, val_beta))
 
             # Check stop condition
-            if self.is_close_to_target(x_goal, y_goal, theta_goal):
+            if self.is_close_to_target(
+                    x_goal,
+                    y_goal,
+                    theta_goal if IS_THETA_CONSIDERED else None):
                 break
 
             loop_control.sleep()
@@ -549,30 +620,6 @@ class Turtle(object):
         print("Reach the target. Control completes.\n")
         print("\tGoal: x = {:.3f}, y = {:.3f}, theta = {}\n".format(
             x_goal, y_goal, theta_goal))
-
-    def is_close_to_target(
-            self,
-            x_goal, y_goal,
-            theta_goal=None,  # If None, not consider theta.
-            x_tol=None, y_tol=None, theta_tol=None):
-
-        # -- Check input
-        if x_tol is None:
-            x_tol = self._cfg_ctrl.x_tol
-
-        if y_tol is None:
-            y_tol = self._cfg_ctrl.y_tol
-
-        if theta_tol is None:
-            theta_tol = self._cfg_ctrl.theta_tol
-
-        # -- Check if the robot is close to the target
-        x, y, theta = self.get_pose()
-        b1 = True if x_goal is None else abs(x - x_goal) < x_tol
-        b2 = True if y_goal is None else abs(y - y_goal) < y_tol
-        b3 = True if theta_goal is None else \
-            abs(Math.pi2pi(theta - theta_goal)) < theta_tol
-        return b1 and b2 and b3
 
     def _reset_pose_env_real(self):
         ''' Reset the robot pose (For real robot mode).
