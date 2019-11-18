@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="2">
+  
+  <name>ros_turtlebot_control</name>
+  <version>1.2.0</version>
+  
+  <description>
+    API services for controlling turtlebot3 in Gazebo or real world.
+  </description>
+  <license>BSD</license>
+  
+  <author>Feiyu Chen</author>
+  <maintainer email="feiyuchen2019@u.northwestern.edu">Feiyu Chen</maintainer>
+  
+  <url type="repository">https://github.com/felixchenfy/ros_turtlebot_control</url>
+  
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>rospy</depend>
+  <depend>roscpp</depend>
+  <depend>geometry_msgs</depend>
+
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+</package>

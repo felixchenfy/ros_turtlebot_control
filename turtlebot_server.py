@@ -1,33 +1,35 @@
 #!/usr/bin/env python
 
 ''' -------------------------------------------------------------------------- '''
-import sys
-import os
-import yaml
-import threading
 
-import rospy
-
-from lib_turtlebot import Turtle
-from ros_turtlebot_control.srv import MoveToPoint, MoveToPointResponse
-from ros_turtlebot_control.srv import MoveToPose, MoveToPoseResponse
-from ros_turtlebot_control.srv import MoveToRelativePoint, MoveToRelativePointResponse
-from ros_turtlebot_control.srv import MoveToRelativePose, MoveToRelativePoseResponse
-from ros_turtlebot_control.srv import StopMoving, StopMovingResponse
-from ros_turtlebot_control.srv import SetPose, SetPoseResponse
 from ros_turtlebot_control.srv import ResetPose, ResetPoseResponse
+from ros_turtlebot_control.srv import SetPose, SetPoseResponse
+from ros_turtlebot_control.srv import StopMoving, StopMovingResponse
+from ros_turtlebot_control.srv import MoveToRelativePose, MoveToRelativePoseResponse
+from ros_turtlebot_control.srv import MoveToRelativePoint, MoveToRelativePointResponse
+from ros_turtlebot_control.srv import MoveToPose, MoveToPoseResponse
+from ros_turtlebot_control.srv import MoveToPoint, MoveToPointResponse
+import rospy
+import threading
+import yaml
+import os
+import sys
+from utils.turtle import Turtle
+from utils.commons import read_yaml_file
+
 
 ''' -------------------------------------------------------------------------- '''
 
 ROOT = os.path.dirname(os.path.abspath(__file__))+"/"
 CONFIG_FILEPATH = ROOT + "config/config.yaml"
-global NODE_NAME, SRV_NAMESPACE, turtle
+NODE_NAME = 'run_turtlebot_control_server'
+SRV_NAMESPACE, turtle = None, None  # To be initialized later.
 
 ''' -------------------------------------------------------------------------- '''
 
 
 class SrvTemplate(object):
-    ''' A ROS service template '''
+    ''' A template for ROS service's server. '''
 
     def __init__(self, srv_name,
                  srv_in_type,
@@ -184,32 +186,20 @@ class HandleResetPose(SrvTemplate):
         return self._srv_out_type()
 
 
-def read_yaml_file(filepath):
-    ''' Read contents from the yaml file.
-    Output:
-        data_dict {dict}: contents of the yaml file.
-            The keys of the dict are `str` type.
-    '''
-    with open(filepath, 'r') as stream:
-        data_dict = yaml.safe_load(stream)
-    return data_dict
-
-
 def main():
 
-    global NODE_NAME, SRV_NAMESPACE, turtle
-
-    NODE_NAME = 'run_turtlebot_control_server'
     rospy.init_node(NODE_NAME)
     rospy.loginfo("Node starts: " + NODE_NAME)
 
-    # Init turtle.
+    # Vars.
+    global turtle, SRV_NAMESPACE
     turtle = Turtle(CONFIG_FILEPATH)
-    cfg = read_yaml_file(CONFIG_FILEPATH)
-    SRV_NAMESPACE = cfg["srv_namespace"]
+    SRV_NAMESPACE = read_yaml_file(CONFIG_FILEPATH)["srv_namespace"]
+
+    # Shutdown function, which is executed right before the node stops.
     rospy.on_shutdown(lambda: turtle.set_speed(v=0, w=0))
 
-    # Init ROS service servers
+    # Init ROS service servers.
     h1 = HandleMoveToPoint()
     h2 = HandleMoveToPose()
     h3 = HandleMoveToRelativePoint()
@@ -218,7 +208,7 @@ def main():
     h6 = HandleSetPose()
     h7 = HandleResetPose()
 
-    # Loop
+    # Loop.
     rospy.spin()
     rospy.loginfo("Node stops: " + NODE_NAME)
 

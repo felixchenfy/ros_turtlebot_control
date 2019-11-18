@@ -1,190 +1,24 @@
 #!/usr/bin/env python
-'''
-Main classes and functions:
 
-* The class that represents the turtlebot:
-    class Turtle
-
-* The main control algorithm is implemented in:
-    def _control_robot_to_reach_pose
-
+''' 
+A `Turtle` class for controlling Turtlebot3.
 '''
 
 
-''' -------------------------------------------------------------------------- '''
+import geo_maths
+from .commons import dict2class, read_yaml_file
+from .pid_controller import PidController
 
-# Common libraries
-
-
-# ROS
-
-# Geometric transformations
-
-# Messages
-
-
-''' -------------------------------------------------------------------------- '''
-
-import argparse
-import numpy as np
-import sys
-import math
-import yaml
-import time
-import sys
-import os
-import rospy
-import roslib
-import rospy
-import tf
-from tf.transformations import euler_from_quaternion
-from tf.transformations import rotation_matrix, quaternion_from_matrix
-from std_msgs.msg import Header
-from geometry_msgs.msg import Point, Quaternion, Pose, Twist, Vector3
+from geometry_msgs.msg import Point, Pose, Twist
 from gazebo_msgs.srv import SetModelState
 from gazebo_msgs.msg import ModelState, ModelStates
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
-ROOT = os.path.dirname(os.path.abspath(__file__))+"/"
 
-''' -------------------------------------------------------------------------- '''
-
-
-class Math:
-    # Mathmatical operations
-
-    @staticmethod
-    def xytheta_to_T(x, y, theta):
-        ''' Convert robot 2D pose (x, y, theta)
-            to 3x3 transformation matrix '''
-        c = np.cos(theta)
-        s = np.sin(theta)
-        T = np.array([
-            [c, -s, x, ],
-            [s,  c, y, ],
-            [0,  0, 1, ],
-        ])
-        return T
-
-    @staticmethod
-    def T_to_xytheta(T):
-        ''' Convert 3x3 transformation matrix
-            to robot 2D pose (x, y, theta) '''
-        assert T.shape == (3, 3)
-        x = T[0, 2]
-        y = T[1, 2]
-        s, c = T[1, 0], T[0, 0]
-        theta = np.arctan2(s, c)
-        return x, y, theta
-
-    @staticmethod
-    def _euler_from_quaternion(quat_xyzw):
-        ''' An overload of tf.transformations.euler_from_quaternion.
-        Argument:
-            quat_xyzw {list, np.ndarray, or geometry_msgs.msg.Quaternion}.
-        Output:
-            euler_xyz {np.ndarray}: [euler_x, euler_y, euler_z].
-        '''
-        def convert_quaternion_data_to_list(quat_xyzw):
-            if type(quat_xyzw) != list and type(quat_xyzw) != np.ndarray:
-                quat_xyzw = [quat_xyzw.x, quat_xyzw.y,
-                             quat_xyzw.z, quat_xyzw.w]
-            return quat_xyzw
-        quat_xyzw = convert_quaternion_data_to_list(quat_xyzw)
-        euler_xyz = euler_from_quaternion(quat_xyzw, 'rxyz')
-        return euler_xyz
-
-    @staticmethod
-    def pose_to_xytheta(pose):
-        '''
-        Argument:
-            pose {geometry_msgs.msg}: Robot pose.
-        Output:
-            x, y, theta
-        '''
-        x = pose.position.x
-        y = pose.position.y
-        euler_xyz = Math._euler_from_quaternion(pose.orientation)
-        theta = euler_xyz[2]
-        return x, y, theta
-
-    @staticmethod
-    def theta_to_rotation_matrix(theta):
-        '''
-        Arguments:
-            theta {float}: robot orientation in world frame.
-        Output:
-            R {np.ndarray: 4x4 rotation matrix}
-        '''
-        Z_AXIS = (0, 0, 1)
-        R = rotation_matrix(theta, Z_AXIS)
-        return R
-
-    @staticmethod
-    def theta_to_quaternion(theta):
-        '''
-        Arguments:
-            theta {float}: robot orientation in world frame.
-        Output:
-            q {geometry_msgs.msg.Quaternion}
-        '''
-        R = Math.theta_to_rotation_matrix(theta)
-        q_list = quaternion_from_matrix(R)
-
-        def list_to_ros_quaternion(l):
-            q = Quaternion(l[0], l[1], l[2], l[3])
-            return q
-        q = list_to_ros_quaternion(q_list)
-        return q
-
-    @staticmethod
-    def calc_dist(x1, y1, x2, y2):
-        return ((x1 - x2)**2 + (y1 - y2)**2)**(0.5)
-
-    @staticmethod
-    def pi2pi(theta):
-        return (theta + math.pi) % (2 * math.pi) - math.pi
-
-
-''' -------------------------------------------------------------------------- '''
-
-
-class SimpleNamespace:
-    ''' This is the same as `from type import SimpleNamespace` in Python3 '''
-
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-    def __repr__(self):
-        keys = sorted(self.__dict__)
-        items = ("{}={!r}".format(k, self.__dict__[k]) for k in keys)
-        return "{}({})".format(type(self).__name__, ", ".join(items))
-
-    def __eq__(self, other):
-        return self.__dict__ == other.__dict__
-
-
-def dict2class(d):
-    ''' Convert a dictionary to a class.
-    The keys in the dictionary must be the type `str`.
-    '''
-    args = SimpleNamespace()
-    args.__dict__.update(**d)
-    return args
-
-
-def read_yaml_file(filepath):
-    ''' Read contents from the yaml file.
-    Output:
-        data_dict {dict}: contents of the yaml file.
-            The keys of the dict are `str` type.
-    '''
-    with open(filepath, 'r') as stream:
-        data_dict = yaml.safe_load(stream)
-    return data_dict
-
-
-''' -------------------------------------------------------------------------- '''
+import numpy as np
+import rospy
+import sys
+import math
 
 
 def call_ros_service(service_name, service_type, service_args=None):
@@ -199,72 +33,18 @@ def call_ros_service(service_name, service_type, service_args=None):
         sys.exit()
 
 
-''' -------------------------------------------------------------------------- '''
-
-
-class PidController(object):
-    ''' PID controller '''
-
-    def __init__(self, T, P=0.0, I=0.0, D=0.0):
-        ''' Arguments
-        T {float}: Control period. Unit: second.
-            This is the inverse of control frequency.
-        P {float or np.array}: Proportional control coefficient.
-        I {float or np.array}: Integral control coefficient.
-        D {float or np.array}: Differential control coefficient.
-        '''
-
-        # -- Check input data
-        b1 = all(isinstance(d, float) for d in [P, I, D])
-        b2 = all(isinstance(d, np.ndarray) for d in [P, I, D])
-        if not b1 and not b2:
-            pid_coef_types = [type(d) for d in [P, I, D]]
-            err_msg = "PidController: Data type of P,I,D coefficients "\
-                "are wrong: " + str(pid_coef_types)
-            raise RuntimeError(err_msg)
-        dim = 1 if b1 else len(P)  # Dimension of the control variable
-
-        # -- Initialize arguments.
-        self._T = T
-        self._P = np.zeros(dim)+P
-        self._I = np.zeros(dim)+I
-        self._D = np.zeros(dim)+D
-        self._err_inte = np.zeros(dim)  # Integration error.
-        self._err_prev = np.zeros(dim)  # Previous error.
-
-    def compute(self, err):
-        ''' Given the error, compute the desired control value . '''
-
-        ctrl_val = 0
-        err = np.array(err)
-
-        # P
-        ctrl_val += np.dot(err, self._P)
-
-        # I
-        self._err_inte += err
-        ctrl_val += self._T * np.dot(self._err_inte, self._I)
-
-        # D
-        ctrl_val += np.dot(err-self._err_prev, self._D) / self._T
-
-        self._err_prev = err
-        return ctrl_val
-
-
-''' -------------------------------------------------------------------------- '''
-
-
 class _TurtleDecorators(object):
 
     @staticmethod
     def manage_moving_state(function_for_moving_robot):
         ''' 
-        If the turtle is executing an old control loop, then stops it.
-        Set the `_is_moving` as True during the control loop.
+        Function:
+            If the turtle is executing an existing control loop, stops it.
+            Then, set `_is_moving` to true.
+            After robot completes moving, set `_is_moving` to false.
 
         Usage: This decorator should be added to 
-            all Turtle's public control functions. 
+            all Turtle's public motion control functions. 
         '''
 
         def wrapper_func(self, *args, **kwargs):
@@ -278,12 +58,9 @@ class _TurtleDecorators(object):
 
 
 class Turtle(object):
-    ''' A `turtle` class which represents the turtlebot,
-        and provides the APIs for controlling turtlebot.
-    '''
 
     def __init__(self,
-                 config_filepath=ROOT + "config/config.yaml"):
+                 config_filepath="config/config.yaml"):
 
         # Read configurations from yaml file.
         self._cfg = dict2class(read_yaml_file(config_filepath))
@@ -360,7 +137,7 @@ class Turtle(object):
         self._pub_speed.publish(twist)
 
     def get_pose(self):
-        x, y, theta = Math.pose_to_xytheta(self._pose)
+        x, y, theta = geo_maths.pose_to_xytheta(self._pose)
         return x, y, theta
 
     def print_state(self, x, y, theta, v=np.nan, w=np.nan):
@@ -473,7 +250,7 @@ class Turtle(object):
         b1 = True if x_goal is None else abs(x - x_goal) < x_tol
         b2 = True if y_goal is None else abs(y - y_goal) < y_tol
         b3 = True if theta_goal is None else \
-            abs(Math.pi2pi(theta - theta_goal)) < theta_tol
+            abs(geo_maths.pi2pi(theta - theta_goal)) < theta_tol
         return b1 and b2 and b3
 
     def _pose_robot2world(self, x_rg, y_rg, theta_rg):
@@ -484,10 +261,10 @@ class Turtle(object):
         '''
         x_wr, y_wr, theta_wr = self.get_pose()
         print(x_wr, y_wr, theta_wr)  # feiyu
-        T_wr = Math.xytheta_to_T(x_wr, y_wr, theta_wr)  # T_world_to_robot
-        T_rg = Math.xytheta_to_T(x_rg, y_rg, theta_rg)  # T_robot_to_goal
+        T_wr = geo_maths.xytheta_to_T(x_wr, y_wr, theta_wr)  # T_world_to_robot
+        T_rg = geo_maths.xytheta_to_T(x_rg, y_rg, theta_rg)  # T_robot_to_goal
         T_wg = np.dot(T_wr, T_rg)
-        x_wg, y_wg, theta_wg = Math.T_to_xytheta(T_wg)
+        x_wg, y_wg, theta_wg = geo_maths.T_to_xytheta(T_wg)
         return x_wg, y_wg, theta_wg
 
     def _control_robot_to_reach_pose(
@@ -542,7 +319,7 @@ class Turtle(object):
         # -- Others
         max_v = cfg.max_v  # m/s
         max_w = cfg.max_w  # rad/s
-        theta_goal = 0.0 if theta_goal is None else Math.pi2pi(theta_goal)
+        theta_goal = 0.0 if theta_goal is None else geo_maths.pi2pi(theta_goal)
 
         # =======================================
         # Init PID controllers
@@ -559,17 +336,17 @@ class Turtle(object):
 
             x, y, theta = self.get_pose()
 
-            rho = Math.calc_dist(x, y, x_goal, y_goal)
-            alpha = Math.pi2pi(math.atan2(y_goal - y, x_goal - x) - theta)
-            beta = Math.pi2pi(theta_goal - theta) - alpha
+            rho = geo_maths.calc_dist(x, y, x_goal, y_goal)
+            alpha = geo_maths.pi2pi(math.atan2(y_goal - y, x_goal - x) - theta)
+            beta = geo_maths.pi2pi(theta_goal - theta) - alpha
 
             # Check moving direction
             sign = 1
             if abs(alpha) > math.pi/2:  # the goal is behind the robot
-                alpha = Math.pi2pi(math.pi - alpha)
-                beta = Math.pi2pi(math.pi - beta)
-                # alpha = Math.pi2pi(alpha)
-                # beta = Math.pi2pi(beta)
+                alpha = geo_maths.pi2pi(math.pi - alpha)
+                beta = geo_maths.pi2pi(math.pi - beta)
+                # alpha = geo_maths.pi2pi(alpha)
+                # beta = geo_maths.pi2pi(beta)
                 sign = -1
 
             # PID control
@@ -588,7 +365,7 @@ class Turtle(object):
                 val_rho = 0  # No linear motion.
                 val_alpha = 0  # No rotating towards target point.
                 # Rotate towards target orientation.
-                val_beta = Math.pi2pi(theta_goal - theta) * P_SPIN
+                val_beta = geo_maths.pi2pi(theta_goal - theta) * P_SPIN
 
             # Get desired speed
             v = sign * val_rho
@@ -659,7 +436,7 @@ class Turtle(object):
 
         # Set goal state.
         p = Point(x=x, y=y, z=0)
-        q = Math.theta_to_quaternion(theta)
+        q = geo_maths.theta_to_quaternion(theta)
         state = ModelState(
             pose=Pose(position=p, orientation=q),
             twist=Twist(),
