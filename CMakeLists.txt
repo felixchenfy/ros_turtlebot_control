@@ -65,6 +65,7 @@ add_service_files(
   StopMoving.srv
   SetPose.srv
   ResetPose.srv
+  GetPose.srv
 )
 
 ## Generate actions in the 'action' folder

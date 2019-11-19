@@ -15,6 +15,7 @@ from ros_turtlebot_control.srv import MoveToRelativePose, MoveToRelativePoseResp
 from ros_turtlebot_control.srv import MoveToRelativePoint, MoveToRelativePointResponse
 from ros_turtlebot_control.srv import MoveToPose, MoveToPoseResponse
 from ros_turtlebot_control.srv import MoveToPoint, MoveToPointResponse
+from ros_turtlebot_control.srv import GetPose, GetPoseResponse
 import rospy
 import threading
 import yaml
@@ -50,6 +51,7 @@ class _SrvTemplate(object):
     def _callback(self, req):
         raise NotImplementedError("Please overload this function!")
 
+
 class TurtlebotControlRosServices(object):
     def __init__(self):
         self._is_start = False
@@ -62,6 +64,7 @@ class TurtlebotControlRosServices(object):
         self._h5 = TurtlebotControlRosServices.ServiceStopMoving()
         self._h6 = TurtlebotControlRosServices.ServiceSetPose()
         self._h7 = TurtlebotControlRosServices.ServiceResetPose()
+        self._h8 = TurtlebotControlRosServices.ServiceGetPose()
         self._is_start = True
 
     def __del__(self):
@@ -182,21 +185,34 @@ class TurtlebotControlRosServices(object):
             rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
+    class ServiceGetPose(_SrvTemplate):
+        def __init__(self):
+            super(TurtlebotControlRosServices.ServiceGetPose, self).__init__(
+                srv_name='get_pose',
+                srv_in_type=GetPose,
+                srv_out_type=GetPoseResponse,
+            )
+
+        def _callback(self, req):
+            res = GetPoseResponse()
+            x, y, theta = turtle.get_pose()
+            return GetPoseResponse(x, y, theta)
+
 
 def main():
 
     rospy.init_node(NODE_NAME)
     rospy.loginfo("Node starts: " + NODE_NAME)
 
-    # Vars.
+    # Define global variables.
     global turtle, SRV_NAMESPACE
     turtle = Turtle(CONFIG_FILEPATH)
     SRV_NAMESPACE = read_yaml_file(CONFIG_FILEPATH)["srv_namespace"]
 
-    # Shutdown function, which is executed right before the node stops.
+    # ROS Node deconstructor.
     rospy.on_shutdown(lambda: turtle.stop_moving())
 
-    # Init ROS service servers.
+    # Start ROS services.
     turtle_services = TurtlebotControlRosServices()
     turtle_services.start()
 
