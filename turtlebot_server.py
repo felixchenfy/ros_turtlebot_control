@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 
-''' -------------------------------------------------------------------------- '''
+'''
+This script starts all Turtlebot control services 
+    which are defined under `srv/` folder.
+The key setence is:
+    turtle_services = TurtlebotControlRosServices()
+    turtle_services.start()
+'''
 
 from ros_turtlebot_control.srv import ResetPose, ResetPoseResponse
 from ros_turtlebot_control.srv import SetPose, SetPoseResponse
