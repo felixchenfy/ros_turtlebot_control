@@ -18,18 +18,14 @@ from utils.turtle import Turtle
 from utils.commons import read_yaml_file
 
 
-''' -------------------------------------------------------------------------- '''
-
 ROOT = os.path.dirname(os.path.abspath(__file__))+"/"
 CONFIG_FILEPATH = ROOT + "config/config.yaml"
 NODE_NAME = 'run_turtlebot_control_server'
 SRV_NAMESPACE, turtle = None, None  # To be initialized later.
 
-''' -------------------------------------------------------------------------- '''
 
-
-class SrvTemplate(object):
-    ''' A template for ROS service's server. '''
+class _SrvTemplate(object):
+    ''' A template for creating ROS service. '''
 
     def __init__(self, srv_name,
                  srv_in_type,
@@ -56,134 +52,139 @@ def start_thread_with_no_args(func):
     thread.start()
 
 
-class HandleMoveToPoint(SrvTemplate):
-    def __init__(self):
-        super(HandleMoveToPoint, self).__init__(
-            srv_name='move_to_point',
-            srv_in_type=MoveToPoint,
-            srv_out_type=MoveToPointResponse,
-        )
+class TurtlebotControlRosServices(object):
 
-    def _callback(self, req):
-        print(self._srv_name + ": "
-              "req.x={}, req.y={}".format(
-                  req.x, req.y))
+    def start(self):
+        self._h1 = TurtlebotControlRosServices.ServiceMoveToPoint()
+        self._h2 = TurtlebotControlRosServices.ServiceMoveToPose()
+        self._h3 = TurtlebotControlRosServices.ServiceMoveToRelativePoint()
+        self._h4 = TurtlebotControlRosServices.ServiceMoveToRelativePose()
+        self._h5 = TurtlebotControlRosServices.ServiceStopMoving()
+        self._h6 = TurtlebotControlRosServices.ServiceSetPose()
+        self._h7 = TurtlebotControlRosServices.ServiceResetPose()
 
-        def control_loop():
-            turtle.move_to_pose(x_goal_w=req.x,
-                                y_goal_w=req.y)
+    class ServiceMoveToPoint(_SrvTemplate):
+        def __init__(self):
+            super(TurtlebotControlRosServices.ServiceMoveToPoint, self).__init__(
+                srv_name='move_to_point',
+                srv_in_type=MoveToPoint,
+                srv_out_type=MoveToPointResponse,
+            )
+
+        def _callback(self, req):
+            print(self._srv_name + ": "
+                  "req.x={}, req.y={}".format(
+                      req.x, req.y))
+
+            def control_loop():
+                turtle.move_to_pose(x_goal_w=req.x,
+                                    y_goal_w=req.y)
+                rospy.loginfo("Service: " + self._srv_name + ": is completed!")
+            start_thread_with_no_args(control_loop)
+            return self._srv_out_type()
+
+    class ServiceMoveToPose(_SrvTemplate):
+        def __init__(self):
+            super(TurtlebotControlRosServices.ServiceMoveToPose, self).__init__(
+                srv_name='move_to_pose',
+                srv_in_type=MoveToPose,
+                srv_out_type=MoveToPoseResponse,
+            )
+
+        def _callback(self, req):
+            print(self._srv_name + ": "
+                  "req.x={}, req.y={}, req.theta={}".format(
+                      req.x, req.y, req.theta))
+
+            def control_loop():
+                turtle.move_to_pose(x_goal_w=req.x,
+                                    y_goal_w=req.y,
+                                    theta_goal_w=req.theta)
+                rospy.loginfo("Service: " + self._srv_name + ": is completed!")
+            start_thread_with_no_args(control_loop)
+            return self._srv_out_type()
+
+    class ServiceMoveToRelativePoint(_SrvTemplate):
+        def __init__(self):
+            super(TurtlebotControlRosServices.ServiceMoveToRelativePoint, self).__init__(
+                srv_name='move_to_relative_point',
+                srv_in_type=MoveToRelativePoint,
+                srv_out_type=MoveToRelativePointResponse,
+            )
+
+        def _callback(self, req):
+            print(self._srv_name + ": "
+                  "req.x={}, req.y={}".format(
+                      req.x, req.y))
+
+            def control_loop():
+                turtle.move_to_relative_pose(
+                    x_goal_r=req.x,
+                    y_goal_r=req.y)
+                rospy.loginfo("Service: " + self._srv_name + ": is completed!")
+            start_thread_with_no_args(control_loop)
+            return self._srv_out_type()
+
+    class ServiceMoveToRelativePose(_SrvTemplate):
+        def __init__(self):
+            super(TurtlebotControlRosServices.ServiceMoveToRelativePose, self).__init__(
+                srv_name='move_to_relative_pose',
+                srv_in_type=MoveToRelativePose,
+                srv_out_type=MoveToRelativePoseResponse,
+            )
+
+        def _callback(self, req):
+            print(self._srv_name + ": "
+                  "req.x={}, req.y={}, req.theta={}".format(
+                      req.x, req.y, req.theta))
+
+            def control_loop():
+                turtle.move_to_relative_pose(
+                    x_goal_r=req.x,
+                    y_goal_r=req.y,
+                    theta_goal_r=req.theta)
+                rospy.loginfo("Service: " + self._srv_name + ": is completed!")
+            start_thread_with_no_args(control_loop)
+            return self._srv_out_type()
+
+    class ServiceStopMoving(_SrvTemplate):
+        def __init__(self):
+            super(TurtlebotControlRosServices.ServiceStopMoving, self).__init__(
+                srv_name='stop_moving',
+                srv_in_type=StopMoving,
+                srv_out_type=StopMovingResponse,
+            )
+
+        def _callback(self, req):
+            turtle.stop_moving()
             rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-        start_thread_with_no_args(control_loop)
-        return self._srv_out_type()
+            return self._srv_out_type()
 
+    class ServiceSetPose(_SrvTemplate):
+        def __init__(self):
+            super(TurtlebotControlRosServices.ServiceSetPose, self).__init__(
+                srv_name='set_pose',
+                srv_in_type=SetPose,
+                srv_out_type=SetPoseResponse,
+            )
 
-class HandleMoveToPose(SrvTemplate):
-    def __init__(self):
-        super(HandleMoveToPose, self).__init__(
-            srv_name='move_to_pose',
-            srv_in_type=MoveToPose,
-            srv_out_type=MoveToPoseResponse,
-        )
-
-    def _callback(self, req):
-        print(self._srv_name + ": "
-              "req.x={}, req.y={}, req.theta={}".format(
-                  req.x, req.y, req.theta))
-
-        def control_loop():
-            turtle.move_to_pose(x_goal_w=req.x,
-                                y_goal_w=req.y,
-                                theta_goal_w=req.theta)
+        def _callback(self, req):
+            turtle.set_pose(req.x, req.y, req.theta)
             rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-        start_thread_with_no_args(control_loop)
-        return self._srv_out_type()
+            return self._srv_out_type()
 
+    class ServiceResetPose(_SrvTemplate):
+        def __init__(self):
+            super(TurtlebotControlRosServices.ServiceResetPose, self).__init__(
+                srv_name='reset_pose',
+                srv_in_type=ResetPose,
+                srv_out_type=ResetPoseResponse,
+            )
 
-class HandleMoveToRelativePoint(SrvTemplate):
-    def __init__(self):
-        super(HandleMoveToRelativePoint, self).__init__(
-            srv_name='move_to_relative_point',
-            srv_in_type=MoveToRelativePoint,
-            srv_out_type=MoveToRelativePointResponse,
-        )
-
-    def _callback(self, req):
-        print(self._srv_name + ": "
-              "req.x={}, req.y={}".format(
-                  req.x, req.y))
-
-        def control_loop():
-            turtle.move_to_relative_pose(
-                x_goal_r=req.x,
-                y_goal_r=req.y)
+        def _callback(self, req):
+            turtle.reset_pose()
             rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-        start_thread_with_no_args(control_loop)
-        return self._srv_out_type()
-
-
-class HandleMoveToRelativePose(SrvTemplate):
-    def __init__(self):
-        super(HandleMoveToRelativePose, self).__init__(
-            srv_name='move_to_relative_pose',
-            srv_in_type=MoveToRelativePose,
-            srv_out_type=MoveToRelativePoseResponse,
-        )
-
-    def _callback(self, req):
-        print(self._srv_name + ": "
-              "req.x={}, req.y={}, req.theta={}".format(
-                  req.x, req.y, req.theta))
-
-        def control_loop():
-            turtle.move_to_relative_pose(
-                x_goal_r=req.x,
-                y_goal_r=req.y,
-                theta_goal_r=req.theta)
-            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-        start_thread_with_no_args(control_loop)
-        return self._srv_out_type()
-
-
-class HandleStopMoving(SrvTemplate):
-    def __init__(self):
-        super(HandleStopMoving, self).__init__(
-            srv_name='stop_moving',
-            srv_in_type=StopMoving,
-            srv_out_type=StopMovingResponse,
-        )
-
-    def _callback(self, req):
-        turtle.stop_moving()
-        rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-        return self._srv_out_type()
-
-
-class HandleSetPose(SrvTemplate):
-    def __init__(self):
-        super(HandleSetPose, self).__init__(
-            srv_name='set_pose',
-            srv_in_type=SetPose,
-            srv_out_type=SetPoseResponse,
-        )
-
-    def _callback(self, req):
-        turtle.set_pose(req.x, req.y, req.theta)
-        rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-        return self._srv_out_type()
-
-
-class HandleResetPose(SrvTemplate):
-    def __init__(self):
-        super(HandleResetPose, self).__init__(
-            srv_name='reset_pose',
-            srv_in_type=ResetPose,
-            srv_out_type=ResetPoseResponse,
-        )
-
-    def _callback(self, req):
-        turtle.reset_pose()
-        rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-        return self._srv_out_type()
+            return self._srv_out_type()
 
 
 def main():
@@ -200,13 +201,8 @@ def main():
     rospy.on_shutdown(lambda: turtle.set_speed(v=0, w=0))
 
     # Init ROS service servers.
-    h1 = HandleMoveToPoint()
-    h2 = HandleMoveToPose()
-    h3 = HandleMoveToRelativePoint()
-    h4 = HandleMoveToRelativePose()
-    h5 = HandleStopMoving()
-    h6 = HandleSetPose()
-    h7 = HandleResetPose()
+    turtle_services = TurtlebotControlRosServices()
+    turtle_services.start()
 
     # Loop.
     rospy.spin()
