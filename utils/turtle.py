@@ -19,6 +19,7 @@ import numpy as np
 import rospy
 import sys
 import math
+import threading
 
 
 def call_ros_service(service_name, service_type, service_args=None):
@@ -36,11 +37,12 @@ def call_ros_service(service_name, service_type, service_args=None):
 class _TurtleDecorators(object):
 
     @staticmethod
-    def manage_moving_state(function_for_moving_robot):
+    def manage_moving_state(func_to_control_turtlebot):
         ''' 
         Function:
             If the turtle is executing an existing control loop, stops it.
-            Then, set `_is_moving` to true.
+            Then, set `_is_moving` to true,
+                and start a new thread to control the robot.
             After robot completes moving, set `_is_moving` to false.
 
         Usage: This decorator should be added to 
@@ -48,12 +50,24 @@ class _TurtleDecorators(object):
         '''
 
         def wrapper_func(self, *args, **kwargs):
-            if self._is_moving:  # Stop current control loop.
-                rospy.logwarn("Wait for previous control loop to stop.")
+
+            # Stop current control loop.
+            if self._is_moving:
+                rospy.logwarn("Wait for previous control loop to stop ...")
                 self.stop_moving()
-            self._is_moving = True
-            function_for_moving_robot(self, *args, **kwargs)
-            self._is_moving = False
+                rospy.logwarn("Previous control loop has stopped.")
+            else:
+                rospy.loginfo("!!! GOOD TO GO !!!")
+
+            # Run the control in a new thread.
+            def _thread_func():
+                self._is_moving = True
+                func_to_control_turtlebot(self, *args, **kwargs)
+                self._is_moving = False
+            thread = threading.Thread(
+                target=_thread_func, args=[])
+            thread.start()
+
         return wrapper_func
 
 
@@ -97,18 +111,15 @@ class Turtle(object):
                 rospy.sleep(0.001)
             self._enable_moving = True
 
-    def reset_pose(self, sleep_time=0.1):
-        ''' Reset Robot pose.
-        If in simulation, reset the simulated robot pose to (0, 0, 0).
-        If real robot, reset the odometry and IMU data to zero.
-        '''
-        rospy.loginfo("Resetting robot state...")
-        if self._cfg.is_in_simulation:
-            self._reset_pose_env_sim()
-        else:
-            self._reset_pose_env_real()
-        rospy.sleep(sleep_time)
-        rospy.loginfo("Reset robot state completes")
+    def is_moving(self):
+        return self._is_moving
+
+    def is_stopped(self):
+        return not self._is_moving
+
+    def get_pose(self):
+        x, y, theta = geo_maths.pose_to_xytheta(self._pose)
+        return x, y, theta
 
     def set_pose(self, x, y, theta, sleep_time=0.1):
         ''' Set Robot pose.
@@ -125,6 +136,19 @@ class Turtle(object):
         rospy.sleep(sleep_time)
         rospy.loginfo("Set robot state completes")
 
+    def reset_pose(self, sleep_time=0.1):
+        ''' Reset Robot pose.
+        If in simulation, reset the simulated robot pose to (0, 0, 0).
+        If real robot, reset the odometry and IMU data to zero.
+        '''
+        rospy.loginfo("Resetting robot state...")
+        if self._cfg.is_in_simulation:
+            self._reset_pose_env_sim()
+        else:
+            self._reset_pose_env_real()
+        rospy.sleep(sleep_time)
+        rospy.loginfo("Reset robot state completes")
+
     def set_speed(self, v, w):
         ''' Set robot speed.
         Arguments:
@@ -135,10 +159,6 @@ class Turtle(object):
         twist.linear.x = v
         twist.angular.z = w
         self._pub_speed.publish(twist)
-
-    def get_pose(self):
-        x, y, theta = geo_maths.pose_to_xytheta(self._pose)
-        return x, y, theta
 
     def print_state(self, x, y, theta, v=np.nan, w=np.nan):
         ''' Print the robot pose and speed. '''
@@ -379,7 +399,9 @@ class Turtle(object):
 
             # Output
             self.set_speed(v, w)  # Output speed.
-            if cnt_steps % 25 == 0:  # Print robot pose and velocity.
+
+            # Print robot pose and velocity.
+            if self._cfg_ctrl.is_print_current_state and cnt_steps % 25 == 0:
                 self.print_state(x, y, theta, v, w)
                 print("\trho = {:.3f}, alpha = {:.3f}, beta = {:.3f}".format(
                     val_rho, val_alpha, val_beta))
@@ -394,9 +416,15 @@ class Turtle(object):
             loop_control.sleep()
 
         self.set_speed(v=0, w=0)
-        print("Reach the target. Control completes.\n")
-        print("\tGoal: x = {:.3f}, y = {:.3f}, theta = {}\n".format(
-            x_goal, y_goal, theta_goal))
+        str_target = "x = {:.3f}, y = {:.3f}, theta = {}".format(
+            x_goal, y_goal, theta_goal)
+
+        if self._enable_moving:
+            rospy.loginfo("Reach the target: " + str_target)
+            rospy.loginfo("Control completes.")
+        else:
+            rospy.logwarn("Control interrupted. Target ({}) is canceled.".format(
+                str_target))
 
     def _reset_pose_env_real(self):
         ''' Reset the robot pose (For real robot mode).

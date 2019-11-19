@@ -50,15 +50,9 @@ class _SrvTemplate(object):
     def _callback(self, req):
         raise NotImplementedError("Please overload this function!")
 
-
-def start_thread_with_no_args(func):
-    thread = threading.Thread(
-        target=func,
-        args=[])
-    thread.start()
-
-
 class TurtlebotControlRosServices(object):
+    def __init__(self):
+        self._is_start = False
 
     def start(self):
         self._h1 = TurtlebotControlRosServices.ServiceMoveToPoint()
@@ -68,6 +62,11 @@ class TurtlebotControlRosServices(object):
         self._h5 = TurtlebotControlRosServices.ServiceStopMoving()
         self._h6 = TurtlebotControlRosServices.ServiceSetPose()
         self._h7 = TurtlebotControlRosServices.ServiceResetPose()
+        self._is_start = True
+
+    def __del__(self):
+        if self._is_start:
+            turtle.stop_moving()
 
     class ServiceMoveToPoint(_SrvTemplate):
         def __init__(self):
@@ -81,12 +80,9 @@ class TurtlebotControlRosServices(object):
             print(self._srv_name + ": "
                   "req.x={}, req.y={}".format(
                       req.x, req.y))
-
-            def control_loop():
-                turtle.move_to_pose(x_goal_w=req.x,
-                                    y_goal_w=req.y)
-                rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-            start_thread_with_no_args(control_loop)
+            turtle.move_to_pose(x_goal_w=req.x,
+                                y_goal_w=req.y)
+            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceMoveToPose(_SrvTemplate):
@@ -102,12 +98,10 @@ class TurtlebotControlRosServices(object):
                   "req.x={}, req.y={}, req.theta={}".format(
                       req.x, req.y, req.theta))
 
-            def control_loop():
-                turtle.move_to_pose(x_goal_w=req.x,
-                                    y_goal_w=req.y,
-                                    theta_goal_w=req.theta)
-                rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-            start_thread_with_no_args(control_loop)
+            turtle.move_to_pose(x_goal_w=req.x,
+                                y_goal_w=req.y,
+                                theta_goal_w=req.theta)
+            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceMoveToRelativePoint(_SrvTemplate):
@@ -123,12 +117,10 @@ class TurtlebotControlRosServices(object):
                   "req.x={}, req.y={}".format(
                       req.x, req.y))
 
-            def control_loop():
-                turtle.move_to_relative_pose(
-                    x_goal_r=req.x,
-                    y_goal_r=req.y)
-                rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-            start_thread_with_no_args(control_loop)
+            turtle.move_to_relative_pose(
+                x_goal_r=req.x,
+                y_goal_r=req.y)
+            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceMoveToRelativePose(_SrvTemplate):
@@ -144,13 +136,11 @@ class TurtlebotControlRosServices(object):
                   "req.x={}, req.y={}, req.theta={}".format(
                       req.x, req.y, req.theta))
 
-            def control_loop():
-                turtle.move_to_relative_pose(
-                    x_goal_r=req.x,
-                    y_goal_r=req.y,
-                    theta_goal_r=req.theta)
-                rospy.loginfo("Service: " + self._srv_name + ": is completed!")
-            start_thread_with_no_args(control_loop)
+            turtle.move_to_relative_pose(
+                x_goal_r=req.x,
+                y_goal_r=req.y,
+                theta_goal_r=req.theta)
+            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceStopMoving(_SrvTemplate):
@@ -204,7 +194,7 @@ def main():
     SRV_NAMESPACE = read_yaml_file(CONFIG_FILEPATH)["srv_namespace"]
 
     # Shutdown function, which is executed right before the node stops.
-    rospy.on_shutdown(lambda: turtle.set_speed(v=0, w=0))
+    rospy.on_shutdown(lambda: turtle.stop_moving())
 
     # Init ROS service servers.
     turtle_services = TurtlebotControlRosServices()
