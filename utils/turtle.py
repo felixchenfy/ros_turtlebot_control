@@ -21,18 +21,17 @@ import sys
 import math
 import threading
 
-
 def call_ros_service(service_name, service_type, service_args=None):
     ''' Call a ROS service.
     '''
     rospy.wait_for_service(service_name)
     try:
         func = rospy.ServiceProxy(service_name, service_type)
-        func(*service_args) if service_args else func()
+        resp = func(*service_args) if service_args else func()
+        return resp
     except rospy.ServiceException as e:
         print("Failed to call service:", service_name)
         sys.exit()
-
 
 class _TurtleDecorators(object):
 

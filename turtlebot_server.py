@@ -6,16 +6,19 @@ This script starts all Turtlebot control services
 The key setence is:
     turtle_services = TurtlebotControlRosServices()
     turtle_services.start()
+WARNING: `SetPose` is not supported for real robot, only for Gazebo simulation.
 '''
 
+from ros_turtlebot_control.srv import GetPose, GetPoseResponse
+from ros_turtlebot_control.srv import MoveToPoint, MoveToPointResponse
+from ros_turtlebot_control.srv import MoveToPose, MoveToPoseResponse
+from ros_turtlebot_control.srv import MoveToRelativePoint, MoveToRelativePointResponse
+from ros_turtlebot_control.srv import MoveToRelativePose, MoveToRelativePoseResponse
 from ros_turtlebot_control.srv import ResetPose, ResetPoseResponse
 from ros_turtlebot_control.srv import SetPose, SetPoseResponse
 from ros_turtlebot_control.srv import StopMoving, StopMovingResponse
-from ros_turtlebot_control.srv import MoveToRelativePose, MoveToRelativePoseResponse
-from ros_turtlebot_control.srv import MoveToRelativePoint, MoveToRelativePointResponse
-from ros_turtlebot_control.srv import MoveToPose, MoveToPoseResponse
-from ros_turtlebot_control.srv import MoveToPoint, MoveToPointResponse
-from ros_turtlebot_control.srv import GetPose, GetPoseResponse
+from ros_turtlebot_control.srv import IsMoving, IsMovingResponse
+
 import rospy
 import threading
 import yaml
@@ -65,6 +68,7 @@ class TurtlebotControlRosServices(object):
         self._h6 = TurtlebotControlRosServices.ServiceSetPose()
         self._h7 = TurtlebotControlRosServices.ServiceResetPose()
         self._h8 = TurtlebotControlRosServices.ServiceGetPose()
+        self._h9 = TurtlebotControlRosServices.ServiceIsMoving()
         self._is_start = True
 
     def __del__(self):
@@ -197,6 +201,18 @@ class TurtlebotControlRosServices(object):
             res = GetPoseResponse()
             x, y, theta = turtle.get_pose()
             return GetPoseResponse(x, y, theta)
+
+    class ServiceIsMoving(_SrvTemplate):
+        def __init__(self):
+            super(TurtlebotControlRosServices.ServiceIsMoving, self).__init__(
+                srv_name='is_moving',
+                srv_in_type=IsMoving,
+                srv_out_type=IsMovingResponse,
+            )
+
+        def _callback(self, req):
+            is_moving = turtle.is_moving()
+            return IsMovingResponse(is_moving)
 
 
 def main():
