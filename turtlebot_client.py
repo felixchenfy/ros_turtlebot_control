@@ -84,17 +84,26 @@ class TurtleClient(object):
     def is_moving(self):
         resp = call_ros_service("is_moving", IsMoving)
         return resp.is_moving
-    
-    def is_at(self, x, y, theta):
+
+    def is_at(self, x, y, theta=None,
+              x_tol=None, y_tol=None, theta_tol=None):
         ''' Whether the robot is at the pose (x, y, theta). '''
         x_r, y_r, theta_r = self.get_pose()
-        return self.are_two_poses_near(x, y, theta, x_r, y_r, theta_r)
+        if theta is None:
+            theta = theta_r
+        return self.are_two_poses_near(
+            x, y, theta,
+            x_r, y_r, theta_r,
+            x_tol, y_tol, theta_tol)
 
     def are_two_poses_near(self,
                            x1, y1, theta1,
                            x2, y2, theta2,
-                           x_tol=0.01, y_tol=0.01, theta_tol=0.1
+                           x_tol=None, y_tol=None, theta_tol=None
                            ):
+        x_tol = 0.015 if x_tol is None else x_tol
+        y_tol = 0.015 if y_tol is None else y_tol
+        theta_tol = 0.08 if theta_tol is None else theta_tol
         b1 = abs(x1 - x2) <= x_tol
         b2 = abs(y1 - y2) <= y_tol
         b3 = abs(theta1 - theta2) <= theta_tol
@@ -106,11 +115,12 @@ class TurtleClient(object):
 
 
 def test_set_pose_IN_SIMULATION_ONLY():
+    rospy.loginfo("Testing `set_pose`...")
     turtle = TurtleClient()
     turtle.reset_pose()
     x, y, theta = 1, 0, 1.57
     turtle.set_pose(x=x, y=y, theta=theta)
-    assert(turtle.is_at(x, y, theta))
+    assert turtle.is_at(x, y, theta), "`set_pose` failed."
     rospy.loginfo("Test `set_pose` succeeds !!!")
 
 
@@ -123,19 +133,81 @@ def test_get_and_reset_pose():
     turtle.move_to_pose(x, y, theta)
     turtle.wait_until_stop()
 
-    # Test `get_pose`.
+    # -- Test `get_pose`.
+    rospy.loginfo("Testing `get_pose`...")
     x0, y0, theta0 = turtle.get_pose()
-    assert(turtle.are_two_poses_near(
-        x0, y0, theta0, x, y, theta))
+    assert turtle.are_two_poses_near(
+        x0, y0, theta0, x, y, theta), "`get_pose` failed"
     rospy.loginfo("Test `get_pose` succeeds !!!")
 
-    # Test `reset_pose`.
+    # -- Test `reset_pose`.
+    rospy.loginfo("Testing `reset_pose`...")
     turtle.reset_pose()
-    turtle.is_at(x=0, y=0, theta=0)
+    assert turtle.is_at(x=0, y=0, theta=0), "`reset_pose` failed"
     rospy.loginfo("Test `reset_pose` succeeds !!!")
+
+
+def test_move_to_point():
+    turtle = TurtleClient()
+    turtle.reset_pose()
+
+    # -- Test `move_to_point`.
+    rospy.loginfo("Testing `move_to_point`...")
+    x, y = 1, 0
+    # Move half way, to avoid ambiguity with `move_to_relative_point`.
+    turtle.move_to_point(x/2.0, y/2.0)
+    turtle.wait_until_stop()
+    turtle.move_to_point(x, y)  # Then, move to target.
+    turtle.wait_until_stop()
+    assert turtle.is_at(x, y), "`move_to_point` failed."
+    rospy.loginfo("Test `move_to_point` succeeds !!!")
+
+    # -- Test `move_to_relative_point`.
+    rospy.loginfo("Testing `move_to_relative_point`...")
+    x, y = -1, 1
+    turtle.move_to_relative_point(x, y)
+    turtle.wait_until_stop()
+    is_position_correct = turtle.is_at(
+        x=0, y=1,  # Global position = (0, 1).
+        # Due to the error of `move_to_point`,
+        #   here we allow larger error.
+        x_tol=0.1, y_tol=0.1)
+    assert is_position_correct, "`move_to_relative_point` failed."
+    rospy.loginfo("Test `move_to_relative_point` succeeds !!!")
+
+
+def test_move_to_poses():
+    turtle = TurtleClient()
+    turtle.reset_pose()
+
+    # -- Test `move_to_pose`.
+    rospy.loginfo("Testing `move_to_pose`...")
+    x, y, theta = 1, 0, 1.57
+    # Move half way, to avoid ambiguity with `move_to_relative_pose`.
+    turtle.move_to_pose(x/2.0, y/2.0, 0.0)
+    turtle.wait_until_stop()
+    turtle.move_to_pose(x, y, theta)  # Then, move to target.
+    turtle.wait_until_stop()
+    assert turtle.is_at(x, y, theta), "`move_to_pose` failed."
+    rospy.loginfo("Test `move_to_pose` succeeds !!!")
+
+    # -- Test `move_to_relative_pose`.
+    rospy.loginfo("Testing `move_to_relative_pose`...")
+    x, y, theta = -1, 1, -1.57
+    turtle.move_to_relative_pose(x, y, theta)
+    turtle.wait_until_stop()
+    is_position_correct = turtle.is_at(
+        x=0, y=-1, theta=0,  # Global pose = (0, -1, 0).
+        # Due to the error of `move_to_pose`,
+        #   here we allow larger error.
+        x_tol=0.1, y_tol=0.1, theta_tol=0.1)
+    assert is_position_correct, "`move_to_relative_pose` failed."
+    rospy.loginfo("Test `move_to_relative_pose` succeeds !!!")
 
 
 if __name__ == "__main__":
     rospy.init_node("turtlebot_client")
+    test_set_pose_IN_SIMULATION_ONLY() # Not for real robot.
     test_get_and_reset_pose()
-    test_set_pose_IN_SIMULATION_ONLY()
+    test_move_to_point()
+    test_move_to_poses()

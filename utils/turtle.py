@@ -21,6 +21,7 @@ import sys
 import math
 import threading
 
+
 def call_ros_service(service_name, service_type, service_args=None):
     ''' Call a ROS service.
     '''
@@ -32,6 +33,7 @@ def call_ros_service(service_name, service_type, service_args=None):
     except rospy.ServiceException as e:
         print("Failed to call service:", service_name)
         sys.exit()
+
 
 class _TurtleDecorators(object):
 
@@ -48,15 +50,13 @@ class _TurtleDecorators(object):
             all Turtle's public motion control functions. 
         '''
 
-        def wrapper_func(self, *args, **kwargs):
+        def new_func_to_control_turtlebot(self, *args, **kwargs):
 
             # Stop current control loop.
             if self._is_moving:
                 rospy.logwarn("Wait for previous control loop to stop ...")
                 self.stop_moving()
                 rospy.logwarn("Previous control loop has stopped.")
-            else:
-                rospy.loginfo("!!! GOOD TO GO !!!")
 
             # Run the control in a new thread.
             def _thread_func():
@@ -67,7 +67,7 @@ class _TurtleDecorators(object):
                 target=_thread_func, args=[])
             thread.start()
 
-        return wrapper_func
+        return new_func_to_control_turtlebot
 
 
 class Turtle(object):
@@ -115,6 +115,10 @@ class Turtle(object):
 
     def is_stopped(self):
         return not self._is_moving
+
+    def wait_until_stop(self):
+        while self._is_moving:
+            rospy.sleep(0.1)
 
     def get_pose(self):
         x, y, theta = geo_maths.pose_to_xytheta(self._pose)
@@ -212,9 +216,6 @@ class Turtle(object):
         The input arguments are the target pose represented in the world frame.
         '''
 
-        print("\nMove robot to the global pose: {}, {}, {}\n".format(
-            x_goal_w, y_goal_w, theta_goal_w))
-
         self._control_robot_to_reach_pose(x_goal_w, y_goal_w, theta_goal_w)
 
         return True
@@ -241,8 +242,6 @@ class Turtle(object):
             theta_goal_w = None
 
         # Move.
-        print("\nMove robot to the global pose: {}, {}, {}\n".format(
-            x_goal_w, y_goal_w, theta_goal_w))
         self._control_robot_to_reach_pose(x_goal_w, y_goal_w, theta_goal_w)
 
         return True
@@ -305,6 +304,9 @@ class Turtle(object):
 
         Reference: page 129 of the book "Robotics, Vision, and Control".
         '''
+
+        rospy.loginfo("Control: Start moving to global pose: {}, {}, {}\n".format(
+            x_goal, y_goal, theta_goal))
 
         # =======================================
         # Get configurations
@@ -419,8 +421,8 @@ class Turtle(object):
             x_goal, y_goal, theta_goal)
 
         if self._enable_moving:
-            rospy.loginfo("Reach the target: " + str_target)
-            rospy.loginfo("Control completes.")
+            rospy.loginfo("Control: Reach the target: " + str_target)
+            rospy.loginfo("Control: Completes.")
         else:
             rospy.logwarn("Control interrupted. Target ({}) is canceled.".format(
                 str_target))

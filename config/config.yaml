@@ -1,0 +1,84 @@
+is_in_simulation: True # You are working with Gazebo(simulation) or real robot.
+
+# ====================================================================== #
+# ROS service names (APIs) provided by this package.
+srv_namespace: "turtle"
+
+# The service name is the same as the service type.
+# For example:
+#   The service name of `MoveToPoint.srv` is:
+#     ${srv_namespace}/move_to_point
+#   The service name of `ResetPose.srv` is:
+#     ${srv_namespace}/reset_pose
+
+# ====================================================================== #
+# Turtlebot control settings.
+control_settings:
+  is_print_current_state: false
+
+  # --------------------------------------------------
+  # PID control
+  control_period: 0.01 # second
+
+  # Proportional control coef for linear speed.
+  # Drive the robot closer to the target point.
+  # If larger, the robot moves faster.
+  # range: (0, +max)
+  p_rho: 0.5
+
+  # Proportional control coef for angular speed.
+  # Rotate the robot direction towards the target point.
+  # If larger, the robot rotates faster.
+  # range: (p_rho, +max)
+  p_alpha: 1.0
+
+  # Proportional control coef for angular speed.
+  # Rotate the robot orientation towards the target orientation.
+  # If absolution value is larger,
+  #   the robot tends to go a larger circle
+  #   instead of a small circle in order to reach target.
+  # range: (-p_rho, 0)
+  p_beta: -0.5
+
+  # Proportional control coef for pure rotation (Spin).
+  # The pure spin mode is enabled after the robot reaches the target point.
+  # range: (0, +max)
+  p_spin: 1.0
+
+  # --------------------------------------------------
+
+  # Tolerance values: when the robot pose is
+  #   very close to the target pose (smaller than tolerance),
+  #   the control is considered as completed.
+  x_tol: 0.01 # meter
+  y_tol: 0.01 # meter
+  theta_tol: 0.05 # rad
+
+  # Speed limit
+  max_v: 0.15 # linear speed, m/s
+  max_w: 0.8 # rotational speed, rad/s
+
+  # TODO: Add acceleration limit
+
+# ====================================================================== #
+# ROS topics/services name used by this package.
+
+# Parameters of the message type `gazebo_msgs.msg.ModelState`,
+# which are used for getting or setting robot pose in simulation mode.
+turtle_name: "turtlebot3_waffle_pi"
+ref_frame: "world"
+
+# Topic for setting turtlebot speed.
+topic_set_turlte_speed: "/cmd_vel"
+
+# Topic to get turtlebot speed if running simulation.
+topic_get_turtle_speed_env_sim: "/gazebo/model_states"
+
+# Topic to get turtlebot speed if running real robot.
+topic_get_turtle_speed_env_real: "/odom"
+
+# Service to reset turtlebot odometry if running simulation.
+srv_reset_pose_env_sim: "/gazebo/set_model_state"
+
+# Topic to reset turtlebot odometry if running real robot.
+topic_reset_pose_env_real: "/reset_odom"

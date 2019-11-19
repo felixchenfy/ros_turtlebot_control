@@ -33,6 +33,22 @@ CONFIG_FILEPATH = ROOT + "config/config.yaml"
 NODE_NAME = 'run_turtlebot_control_server'
 SRV_NAMESPACE, turtle = None, None  # To be initialized later.
 
+# ============================================================================== #
+
+
+def _srv_callback_wrapper(callback_func):
+    ''' Print messages before and after the callback function. '''
+
+    def new_callback_func(self, req):
+        '''Argument: `req` is the input of the ROS service call. '''
+        rospy.loginfo("Service: " + self._srv_name +
+                      ": Receive request: {}".format(req))
+        response = callback_func(self, req)
+        rospy.loginfo("Service: " + self._srv_name +
+                      ": Request has been sent!")
+        return response
+    return new_callback_func
+
 
 class _SrvTemplate(object):
     ''' A template for creating ROS service. '''
@@ -53,6 +69,8 @@ class _SrvTemplate(object):
 
     def _callback(self, req):
         raise NotImplementedError("Please overload this function!")
+
+# ============================================================================== #
 
 
 class TurtlebotControlRosServices(object):
@@ -84,12 +102,8 @@ class TurtlebotControlRosServices(object):
             )
 
         def _callback(self, req):
-            print(self._srv_name + ": "
-                  "req.x={}, req.y={}".format(
-                      req.x, req.y))
             turtle.move_to_pose(x_goal_w=req.x,
                                 y_goal_w=req.y)
-            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceMoveToPose(_SrvTemplate):
@@ -100,15 +114,11 @@ class TurtlebotControlRosServices(object):
                 srv_out_type=MoveToPoseResponse,
             )
 
+        @_srv_callback_wrapper
         def _callback(self, req):
-            print(self._srv_name + ": "
-                  "req.x={}, req.y={}, req.theta={}".format(
-                      req.x, req.y, req.theta))
-
             turtle.move_to_pose(x_goal_w=req.x,
                                 y_goal_w=req.y,
                                 theta_goal_w=req.theta)
-            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceMoveToRelativePoint(_SrvTemplate):
@@ -119,15 +129,11 @@ class TurtlebotControlRosServices(object):
                 srv_out_type=MoveToRelativePointResponse,
             )
 
+        @_srv_callback_wrapper
         def _callback(self, req):
-            print(self._srv_name + ": "
-                  "req.x={}, req.y={}".format(
-                      req.x, req.y))
-
             turtle.move_to_relative_pose(
                 x_goal_r=req.x,
                 y_goal_r=req.y)
-            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceMoveToRelativePose(_SrvTemplate):
@@ -138,16 +144,12 @@ class TurtlebotControlRosServices(object):
                 srv_out_type=MoveToRelativePoseResponse,
             )
 
+        @_srv_callback_wrapper
         def _callback(self, req):
-            print(self._srv_name + ": "
-                  "req.x={}, req.y={}, req.theta={}".format(
-                      req.x, req.y, req.theta))
-
             turtle.move_to_relative_pose(
                 x_goal_r=req.x,
                 y_goal_r=req.y,
                 theta_goal_r=req.theta)
-            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceStopMoving(_SrvTemplate):
@@ -158,9 +160,9 @@ class TurtlebotControlRosServices(object):
                 srv_out_type=StopMovingResponse,
             )
 
+        @_srv_callback_wrapper
         def _callback(self, req):
             turtle.stop_moving()
-            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceSetPose(_SrvTemplate):
@@ -171,9 +173,9 @@ class TurtlebotControlRosServices(object):
                 srv_out_type=SetPoseResponse,
             )
 
+        @_srv_callback_wrapper
         def _callback(self, req):
             turtle.set_pose(req.x, req.y, req.theta)
-            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceResetPose(_SrvTemplate):
@@ -184,9 +186,9 @@ class TurtlebotControlRosServices(object):
                 srv_out_type=ResetPoseResponse,
             )
 
+        @_srv_callback_wrapper
         def _callback(self, req):
             turtle.reset_pose()
-            rospy.loginfo("Service: " + self._srv_name + ": is completed!")
             return self._srv_out_type()
 
     class ServiceGetPose(_SrvTemplate):
