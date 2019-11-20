@@ -24,12 +24,12 @@ import threading
 import yaml
 import os
 import sys
-from utils.turtle import Turtle
+from turtle_lib import Turtle
 from utils.commons import read_yaml_file
 
 
 ROOT = os.path.dirname(os.path.abspath(__file__))+"/"
-CONFIG_FILEPATH = ROOT + "config/config.yaml"
+CONFIG_FILEPATH = ROOT + "config.yaml"
 NODE_NAME = 'run_turtlebot_control_server'
 SRV_NAMESPACE, turtle = None, None  # To be initialized later.
 

@@ -38,7 +38,7 @@ control_settings:
   #   the robot tends to go a larger circle
   #   instead of a small circle in order to reach target.
   # range: (-p_rho, 0)
-  p_beta: -0.5
+  p_beta: -0.2
 
   # Proportional control coef for pure rotation (Spin).
   # The pure spin mode is enabled after the robot reaches the target point.
@@ -55,7 +55,7 @@ control_settings:
   theta_tol: 0.05 # rad
 
   # Speed limit
-  max_v: 0.15 # linear speed, m/s
+  max_v: 0.25 # linear speed, m/s
   max_w: 0.8 # rotational speed, rad/s
 
   # TODO: Add acceleration limit

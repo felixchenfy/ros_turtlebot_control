@@ -74,12 +74,15 @@ class TurtleClient(object):
         rospy.sleep(0.05)
 
     def set_pose(self, x, y, theta):
+        rospy.logwarn("`set_pose` is only supported for "
+                      "Gazebo simultion, not real robot !!!")
         call_ros_service("set_pose", SetPose,
                          service_args=(x, y, theta))
         rospy.sleep(0.05)
 
     def stop_moving(self):
         call_ros_service("stop_moving", StopMoving)
+        rospy.sleep(0.05)
 
     def is_moving(self):
         resp = call_ros_service("is_moving", IsMoving)
@@ -127,14 +130,16 @@ def test_set_pose_IN_SIMULATION_ONLY():
 def test_get_and_reset_pose():
     turtle = TurtleClient()
 
+    # -- Test `get_pose`.
+    rospy.loginfo("Testing `get_pose`...")
+
     # Change robot position.
     turtle.reset_pose()
     x, y, theta = 0.1, 0.1, 0
     turtle.move_to_pose(x, y, theta)
     turtle.wait_until_stop()
 
-    # -- Test `get_pose`.
-    rospy.loginfo("Testing `get_pose`...")
+    # Get pose.
     x0, y0, theta0 = turtle.get_pose()
     assert turtle.are_two_poses_near(
         x0, y0, theta0, x, y, theta), "`get_pose` failed"
@@ -147,42 +152,13 @@ def test_get_and_reset_pose():
     rospy.loginfo("Test `reset_pose` succeeds !!!")
 
 
-def test_move_to_point():
-    turtle = TurtleClient()
-    turtle.reset_pose()
-
-    # -- Test `move_to_point`.
-    rospy.loginfo("Testing `move_to_point`...")
-    x, y = 1, 0
-    # Move half way, to avoid ambiguity with `move_to_relative_point`.
-    turtle.move_to_point(x/2.0, y/2.0)
-    turtle.wait_until_stop()
-    turtle.move_to_point(x, y)  # Then, move to target.
-    turtle.wait_until_stop()
-    assert turtle.is_at(x, y), "`move_to_point` failed."
-    rospy.loginfo("Test `move_to_point` succeeds !!!")
-
-    # -- Test `move_to_relative_point`.
-    rospy.loginfo("Testing `move_to_relative_point`...")
-    x, y = -1, 1
-    turtle.move_to_relative_point(x, y)
-    turtle.wait_until_stop()
-    is_position_correct = turtle.is_at(
-        x=0, y=1,  # Global position = (0, 1).
-        # Due to the error of `move_to_point`,
-        #   here we allow larger error.
-        x_tol=0.1, y_tol=0.1)
-    assert is_position_correct, "`move_to_relative_point` failed."
-    rospy.loginfo("Test `move_to_relative_point` succeeds !!!")
-
-
 def test_move_to_poses():
     turtle = TurtleClient()
     turtle.reset_pose()
 
     # -- Test `move_to_pose`.
     rospy.loginfo("Testing `move_to_pose`...")
-    x, y, theta = 1, 0, 1.57
+    x, y, theta = 0.5, 0, 1.57
     # Move half way, to avoid ambiguity with `move_to_relative_pose`.
     turtle.move_to_pose(x/2.0, y/2.0, 0.0)
     turtle.wait_until_stop()
@@ -193,21 +169,84 @@ def test_move_to_poses():
 
     # -- Test `move_to_relative_pose`.
     rospy.loginfo("Testing `move_to_relative_pose`...")
-    x, y, theta = -1, 1, -1.57
+    x, y, theta = -0.5, 0.5, -1.57
     turtle.move_to_relative_pose(x, y, theta)
     turtle.wait_until_stop()
     is_position_correct = turtle.is_at(
-        x=0, y=-1, theta=0,  # Global pose = (0, -1, 0).
+        x=0, y=-0.5, theta=0,  # Global pose = (0, -1, 0).
         # Due to the error of `move_to_pose`,
         #   here we allow larger error.
-        x_tol=0.1, y_tol=0.1, theta_tol=0.1)
+        x_tol=0.05, y_tol=0.05, theta_tol=0.1)
     assert is_position_correct, "`move_to_relative_pose` failed."
     rospy.loginfo("Test `move_to_relative_pose` succeeds !!!")
 
 
+def test_move_to_points():
+    turtle = TurtleClient()
+    turtle.reset_pose()
+
+    # -- Test `move_to_point`.
+    rospy.loginfo("Testing `move_to_point`...")
+    x, y = 0.5, 0
+    # Move half way, to avoid ambiguity with `move_to_relative_point`.
+    turtle.move_to_point(x/2.0, y/2.0)
+    turtle.wait_until_stop()
+    turtle.move_to_point(x, y)  # Then, move to target.
+    turtle.wait_until_stop()
+    assert turtle.is_at(x, y), "`move_to_point` failed."
+    rospy.loginfo("Test `move_to_point` succeeds !!!")
+
+    # -- Test `move_to_relative_point`.
+    rospy.loginfo("Testing `move_to_relative_point`...")
+    x, y = -0.5, 0.5
+    turtle.move_to_relative_point(x, y)
+    turtle.wait_until_stop()
+    is_position_correct = turtle.is_at(
+        x=0, y=0.5,  # Global position = (0, 1).
+        # Due to the error of `move_to_point`,
+        #   here we allow larger error.
+        x_tol=0.05, y_tol=0.05)
+    assert is_position_correct, "`move_to_relative_point` failed."
+    rospy.loginfo("Test `move_to_relative_point` succeeds !!!")
+
+    turtle.move_to_pose(x=0, y=0.5, theta=0)  # Rotate to face front.
+
+
+def test_change_target_and_stop():
+    turtle = TurtleClient()
+    turtle.reset_pose()
+
+    # -- Test `change target`.
+    rospy.loginfo("Testing `change target`...")
+
+    # Set the initial target as x=-0.5.
+    turtle.move_to_relative_pose(-0.5, 0, 0)
+    rospy.sleep(0.2)
+
+    # Change target to be x=0.5.
+    turtle.move_to_relative_pose(0.5, 0, 0)
+    rospy.sleep(0.8)
+
+    # Check if the robot is moving to x=0.5.
+    x, y, theta = turtle.get_pose()
+    assert x > 0, "`change target` failed."
+    rospy.loginfo("Test `change target` succeeds !!!")
+
+    # -- Test `stop_moving`.
+    turtle.stop_moving()
+    assert not turtle.is_moving(),  "`stop_moving` failed."
+    rospy.loginfo("Test `stop_moving` succeeds !!!")
+
+    # Move back to origin.
+    rospy.sleep(1.0)
+    rospy.loginfo("Move back to origin.")
+    turtle.move_to_pose(0, 0, 0)
+
+
 if __name__ == "__main__":
     rospy.init_node("turtlebot_client")
-    test_set_pose_IN_SIMULATION_ONLY() # Not for real robot.
-    test_get_and_reset_pose()
-    test_move_to_point()
-    test_move_to_poses()
+    # test_set_pose_IN_SIMULATION_ONLY() # Not for real robot.
+    # test_get_and_reset_pose()
+    # test_move_to_poses()
+    # test_move_to_points()
+    test_change_target_and_stop()

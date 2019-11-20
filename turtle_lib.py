@@ -5,9 +5,9 @@ A `Turtle` class for controlling Turtlebot3.
 '''
 
 
-import geo_maths
-from .commons import dict2class, read_yaml_file
-from .pid_controller import PidController
+import utils.geo_maths as geo_maths
+from utils.commons import dict2class, read_yaml_file
+from utils.pid_controller import PidController
 
 from geometry_msgs.msg import Point, Pose, Twist
 from gazebo_msgs.srv import SetModelState
@@ -20,6 +20,7 @@ import rospy
 import sys
 import math
 import threading
+import collections
 
 
 def call_ros_service(service_name, service_type, service_args=None):
@@ -33,6 +34,35 @@ def call_ros_service(service_name, service_type, service_args=None):
     except rospy.ServiceException as e:
         print("Failed to call service:", service_name)
         sys.exit()
+
+
+class Trajectory(object):
+    ''' To store the path poses of the robot. '''
+
+    def __init__(self, buffer_size=20):
+        self._q_x = collections.deque()
+        self._q_y = collections.deque()
+        self._q_theta = collections.deque()
+        self._buffer_size = buffer_size
+
+    def add_pose(self, x, y, theta):
+        self._q_x.append(x)
+        self._q_y.append(y)
+        self._q_theta.append(theta)
+        if len(self._q_x) > self._buffer_size:
+            self._q_x.popleft()
+            self._q_y.popleft()
+            self._q_theta.popleft()
+
+    def is_static(self, thresh_std_variance=0.0001):
+        ''' If the standard variance of the historical data
+            is smaller than threshold, than the robot is static.
+        '''
+        if len(self._q_x) < self._buffer_size:
+            return False
+        std_var = (np.std(self._q_x) + np.std(self._q_y) +
+                   np.std(self._q_theta))
+        return std_var < thresh_std_variance
 
 
 class _TurtleDecorators(object):
@@ -73,7 +103,7 @@ class _TurtleDecorators(object):
 class Turtle(object):
 
     def __init__(self,
-                 config_filepath="config/config.yaml"):
+                 config_filepath="config.yaml"):
 
         # Read configurations from yaml file.
         self._cfg = dict2class(read_yaml_file(config_filepath))
@@ -310,7 +340,7 @@ class Turtle(object):
 
         # =======================================
         # Get configurations
-        #   See `config/config.yaml` and the content of `control_settings`.
+        #   See `config.yaml` and the content of `control_settings`.
         cfg = self._cfg_ctrl
 
         # -- PID control
@@ -341,6 +371,7 @@ class Turtle(object):
         max_v = cfg.max_v  # m/s
         max_w = cfg.max_w  # rad/s
         theta_goal = 0.0 if theta_goal is None else geo_maths.pi2pi(theta_goal)
+        traj = Trajectory(buffer_size=10)
 
         # =======================================
         # Init PID controllers
@@ -406,7 +437,12 @@ class Turtle(object):
                 self.print_state(x, y, theta, v, w)
                 print("\trho = {:.3f}, alpha = {:.3f}, beta = {:.3f}".format(
                     val_rho, val_alpha, val_beta))
-
+            if cnt_steps % 5 == 0:
+                traj.add_pose(x, y, theta)
+                if traj.is_static():
+                    msg_warn = "Control: The control output is too week. Stopped."
+                    rospy.logwarn(msg_warn)
+                    break
             # Check stop condition
             if self.is_close_to_target(
                     x_goal,
