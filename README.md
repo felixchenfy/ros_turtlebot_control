@@ -16,8 +16,8 @@ rosservice call /turtle/move_to_relative_point -- -1 1 # (x, y)
   * [Installation](#installation)
   * [Check configuration](#check-configuration)
   * [Start services' server](#start-services--server)
-  * [Send services from command line](#send-services-from-command-line)
-  * [Send services from python functions](#send-services-from-python-functions)
+  * [Call services from command line](#call-services-from-command-line)
+  * [Call services from python functions](#call-services-from-python-functions)
 
 
 
@@ -91,7 +91,7 @@ Start this turtlebot control server:
 rosrun ros_turtlebot_control turtlebot_server.py   
 ```
 
-## Send services from command line
+## Call services from command line
 
 * Move to (x=-1, y=-1, theta=1.57):
 ```
@@ -119,7 +119,7 @@ rosservice call /turtle/move_to_relative_point -- 0 -1
 rosservice call /turtle/reset_pose
 ```
 
-## Send services from python functions
+## Call services from python functions
 
 I wrote a class and some unittests in [turtlebot_client.py](turtlebot_client.py):
 ```

@@ -5,7 +5,7 @@
   <version>1.2.0</version>
   
   <description>
-    API services for controlling turtlebot3 in Gazebo or real world.
+    ROS services for controlling Turtlebot3 to target pose by `Move to Pose` algorithm.
   </description>
   <license>BSD</license>
   
