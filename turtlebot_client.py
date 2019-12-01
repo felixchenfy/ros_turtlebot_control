@@ -221,15 +221,16 @@ def test_change_target_and_stop():
 
     # Set the initial target as x=-0.5.
     turtle.move_to_relative_pose(-0.5, 0, 0)
-    rospy.sleep(0.2)
+    rospy.sleep(0.1)
 
-    # Change target to be x=0.5.
-    turtle.move_to_relative_pose(0.5, 0, 0)
-    rospy.sleep(0.8)
+    # Change target to be x=1.0.
+    turtle.move_to_relative_pose(1.0, 0, 0)
+    rospy.sleep(2.0)
 
-    # Check if the robot is moving to x=0.5.
-    x, y, theta = turtle.get_pose()
-    assert x > 0, "`change target` failed."
+    # Check that the robot is not at old target.
+    is_at_old_position = turtle.is_at(
+        x=-0.5, y=0, theta=0)
+    assert not is_at_old_position, "`change target` failed."
     rospy.loginfo("Test `change target` succeeds !!!")
 
     # -- Test `stop_moving`.
@@ -245,8 +246,8 @@ def test_change_target_and_stop():
 
 if __name__ == "__main__":
     rospy.init_node("turtlebot_client")
-    # test_set_pose_IN_SIMULATION_ONLY() # Not for real robot.
-    # test_get_and_reset_pose()
-    # test_move_to_poses()
-    # test_move_to_points()
+    test_set_pose_IN_SIMULATION_ONLY()  # Not for real robot.
+    test_get_and_reset_pose()
+    test_move_to_poses()
+    test_move_to_points()
     test_change_target_and_stop()

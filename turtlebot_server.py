@@ -45,7 +45,7 @@ def _srv_callback_wrapper(callback_func):
                       ": Receive request: {}".format(req))
         response = callback_func(self, req)
         rospy.loginfo("Service: " + self._srv_name +
-                      ": Request has been sent!")
+                      ": Request has been sent to turtlebot_lib.py!")
         return response
     return new_callback_func
 

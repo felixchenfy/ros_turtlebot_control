@@ -1,7 +1,5 @@
-is_in_simulation: True # You are working with Gazebo(simulation) or real robot.
-
 # ====================================================================== #
-# ROS service names (APIs) provided by this package.
+# ROS services provided by this package.
 srv_namespace: "turtle"
 
 # The service name is the same as the service type.
@@ -10,6 +8,34 @@ srv_namespace: "turtle"
 #     ${srv_namespace}/move_to_point
 #   The service name of `ResetPose.srv` is:
 #     ${srv_namespace}/reset_pose
+
+# ====================================================================== #
+# ROS topics/services name used by this package.
+
+# World coordinate and robot coordinate name.
+odom_frame: "odom"
+base_frame: "base_footprint" # If having error, try "base_link" or "base_footprint".
+
+# Topic for setting turtlebot speed.
+topic_set_turlte_speed: "/cmd_vel"
+
+# Reset robot pose.
+reset_pose_for_real_robot:
+  # For real robot,
+  topic_reset_pose_for_real_robot: "/reset_odom"
+
+  # For simulation,
+  # the `srv_set_pose` shown in the next section will be used to reset robot pose.
+
+# Set robot pose (Only supported for simulation).
+set_pose_in_simulation:
+  # Parameters of the message type `gazebo_msgs.msg.ModelState`,
+  # which are used for getting or setting robot pose in simulation.
+  model_name: "turtlebot3_waffle_pi"
+  reference_frame: "world"
+
+  # Service name of setting turtlebot odometry in simulation.
+  srv_set_pose: "/gazebo/set_model_state"
 
 # ====================================================================== #
 # Turtlebot control settings.
@@ -57,28 +83,3 @@ control_settings:
   # Speed limit
   max_v: 0.25 # linear speed, m/s
   max_w: 0.8 # rotational speed, rad/s
-
-  # TODO: Add acceleration limit
-
-# ====================================================================== #
-# ROS topics/services name used by this package.
-
-# Parameters of the message type `gazebo_msgs.msg.ModelState`,
-# which are used for getting or setting robot pose in simulation mode.
-turtle_name: "turtlebot3_waffle_pi"
-ref_frame: "world"
-
-# Topic for setting turtlebot speed.
-topic_set_turlte_speed: "/cmd_vel"
-
-# Topic to get turtlebot speed if running simulation.
-topic_get_turtle_speed_env_sim: "/gazebo/model_states"
-
-# Topic to get turtlebot speed if running real robot.
-topic_get_turtle_speed_env_real: "/odom"
-
-# Service to reset turtlebot odometry if running simulation.
-srv_reset_pose_env_sim: "/gazebo/set_model_state"
-
-# Topic to reset turtlebot odometry if running real robot.
-topic_reset_pose_env_real: "/reset_odom"

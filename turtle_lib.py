@@ -14,6 +14,8 @@ from gazebo_msgs.srv import SetModelState
 from gazebo_msgs.msg import ModelState, ModelStates
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
+from tf.transformations import euler_from_quaternion
+import tf
 
 import numpy as np
 import rospy
@@ -30,10 +32,13 @@ def call_ros_service(service_name, service_type, service_args=None):
     try:
         func = rospy.ServiceProxy(service_name, service_type)
         resp = func(*service_args) if service_args else func()
-        return resp
-    except rospy.ServiceException as e:
-        print("Failed to call service:", service_name)
-        sys.exit()
+        return True, resp
+    except:
+        rospy.logwarn("Failed to call service:", service_name)
+        return False, None
+    # except rospy.ServiceException as e:
+    #     print("Failed to call service:", service_name)
+    #     sys.exit()
 
 
 class Trajectory(object):
@@ -105,38 +110,30 @@ class Turtle(object):
     def __init__(self,
                  config_filepath="config.yaml"):
 
-        # Read configurations from yaml file.
+        # -- Read configurations from yaml file.
         self._cfg = dict2class(read_yaml_file(config_filepath))
         self._cfg_ctrl = dict2class(self._cfg.control_settings)
 
-        # Publisher.
+        # -- Turtle speed publisher.
         self._pub_speed = rospy.Publisher(
             self._cfg.topic_set_turlte_speed, Twist, queue_size=10)
 
-        # Subscriber.
-        if self._cfg.is_in_simulation:
-            self._sub_pose = rospy.Subscriber(
-                self._cfg.topic_get_turtle_speed_env_sim,
-                ModelStates, self._callback_sub_pose_env_sim)
-        else:
-            self._sub_pose = rospy.Subscriber(
-                self._cfg.topic_get_turtle_speed_env_real,
-                Odometry, self._callback_sub_pose_env_real)
+        # -- Turtle speed tf inquiry.
+        self._tf_listener = tf.TransformListener()
+        self._odom_frame = self._cfg.odom_frame
+        self._base_frame = self._cfg.base_frame
+        # self._setup_pose_subscriber()  # Deprecated. Don't use.
 
-        # Robot state.
-        self._time0 = self._reset_time()
-        self._pose = Pose()
-        self._twist = Twist()
+        # -- Initialize robot state.
 
-        # Robot moving states
-        # for starting/stopping control loop in multi threading.
+        # Moving state: for starting/stopping control loop in multi threading.
         self._is_moving = False
         self._enable_moving = True
 
     def stop_moving(self):
         if self._is_moving:
             self._enable_moving = False
-            while self._is_moving:
+            while (not rospy.is_shutdown()) and self._is_moving:
                 rospy.sleep(0.001)
             self._enable_moving = True
 
@@ -151,21 +148,30 @@ class Turtle(object):
             rospy.sleep(0.1)
 
     def get_pose(self):
-        x, y, theta = geo_maths.pose_to_xytheta(self._pose)
+        try:
+            (trans, rot) = self._tf_listener.lookupTransform(
+                self._odom_frame,
+                self._base_frame,
+                rospy.Time(0))
+            rotation = euler_from_quaternion(rot)
+
+        except (tf.Exception, tf.ConnectivityException, tf.LookupException):
+            rospy.loginfo("TF Exception in Turtle::get_pose()")
+            return
+        x, y, theta = trans[0], trans[1], rotation[2]
         return x, y, theta
 
     def set_pose(self, x, y, theta, sleep_time=0.1):
-        ''' Set Robot pose.
+        ''' Set Robot pose (Only supported for simulation.)
         If in simulation, reset the simulated robot pose.
-        If real robot, this function does nothing !!!
+        If real robot, this function throws error!
         '''
-        if self._cfg.is_in_simulation:
-            rospy.loginfo("Setting robot state...")
-            self._set_pose_env_sim(x, y, theta)
-        else:
-            raise RuntimeError(
-                "Set real robot's pose is not supported.")  # TODO
-            # self._set_pose_env_real(x, y, theta)
+        rospy.loginfo("Setting robot state...")
+        is_succeed = self._set_pose_for_simulation(x, y, theta)
+        if not is_succeed:
+            e = "Set pose failed. Setting pose only supports for simulation, not real robot!"
+            rospy.logerr(e)
+            raise RuntimeError(e)
         rospy.sleep(sleep_time)
         rospy.loginfo("Set robot state completes")
 
@@ -175,12 +181,25 @@ class Turtle(object):
         If real robot, reset the odometry and IMU data to zero.
         '''
         rospy.loginfo("Resetting robot state...")
-        if self._cfg.is_in_simulation:
-            self._reset_pose_env_sim()
+
+        # Try the resetting command for simulation.
+        is_succeed = self._set_pose_for_simulation(x=0.0, y=0.0, theta=0.0)
+        mode = "simulation" if is_succeed else "real_robot"
+        if mode == "simulation":
+            rospy.loginfo("Reset robot pose in simulation... Done.")
+
         else:
-            self._reset_pose_env_real()
+            # Try the resetting command for real robot.
+            reset_odom = rospy.Publisher(
+                self._cfg.reset_pose_for_real_robot["topic_reset_pose_for_real_robot"],
+                Empty, queue_size=10)
+            reset_odom.publish(Empty())
+            rospy.loginfo("Reset robot pose for the real robot... Done.")
+
         rospy.sleep(sleep_time)
-        rospy.loginfo("Reset robot state completes")
+        if not self.is_close_to_target(x_goal=0, y_goal=0, theta_goal=0):
+            raise RuntimeError(
+                "Reset robot pose failed for {} mode".format(mode))
 
     def set_speed(self, v, w):
         ''' Set robot speed.
@@ -463,41 +482,7 @@ class Turtle(object):
             rospy.logwarn("Control interrupted. Target ({}) is canceled.".format(
                 str_target))
 
-    def _reset_pose_env_real(self):
-        ''' Reset the robot pose (For real robot mode).
-        This is the same as the terminal command:
-            $ rostopic pub /reset std_msgs/Empty  '{}'
-        '''
-        if self._cfg.is_in_simulation:
-            raise RuntimeError(
-                "In `simulation` mode, this function shouldn't be called.")
-        reset_odom = rospy.Publisher(
-            self._cfg.topic_reset_pose_env_real,
-            Empty, queue_size=10)
-        reset_odom.publish(Empty())
-
-    def _reset_pose_env_sim(self):
-        ''' Reset the robot pose (For simulation mode).
-        This is the same as the terminal command:
-            $ rostopic pub /gazebo/set_model_state gazebo_msgs/ModelState \
-            '{  model_name: turtlebot3_waffle_pi, \
-                pose: {     position: { x: 0, y: 0, z: 0 }, \
-                            orientation: {x: 0, y: 0, z: 0, w: 1 } }, \
-                twist: {    linear: { x: 0, y: 0, z: 0 }, \
-                            angular: { x: 0, y: 0, z: 0}  }, \
-                reference_frame: world }'
-        '''
-        self._set_pose_env_sim(x=0.0, y=0.0, theta=0.0)
-
-    def _set_pose_env_real(self, x, y, theta):
-        raise RuntimeError("Set real robot's pose is not supported.")  # TODO
-
-    def _set_pose_env_sim(self, x, y, theta):
-
-        # Sanity check.
-        if not self._cfg.is_in_simulation:
-            raise RuntimeError(
-                "In `real robot` mode, this function shouldn't be called.")
+    def _set_pose_for_simulation(self, x, y, theta):
 
         # Set goal state.
         p = Point(x=x, y=y, z=0)
@@ -505,37 +490,25 @@ class Turtle(object):
         state = ModelState(
             pose=Pose(position=p, orientation=q),
             twist=Twist(),
-            model_name=self._cfg.turtle_name,
-            reference_frame=self._cfg.ref_frame)
+            model_name=self._cfg.set_pose_in_simulation["model_name"],
+            reference_frame=self._cfg.set_pose_in_simulation["reference_frame"])
 
         # Call ROS service to set robot pose.
-        call_ros_service(
-            service_name=self._cfg.srv_reset_pose_env_sim,
+        is_succeed, response = call_ros_service(
+            service_name=self._cfg.set_pose_in_simulation["srv_set_pose"],
             service_type=SetModelState,
             service_args=(state, )
         )
+        return is_succeed
 
-    def _callback_sub_pose_env_sim(self, model_states):
-        ''' ROS topic subscriber's callback function
-            for receiving and updating robot pose when running simulation.
-        '''
-        idx = model_states.name.index(self._cfg.turtle_name)
-        self._pose = model_states.pose[idx]
-        self._twist = model_states.twist[idx]
+    # =============================== Deprecated functions ===============================
 
-    def _callback_sub_pose_env_real(self, odometry):
-        ''' ROS topic subscriber's callback function
-            for receiving and updating robot pose when running robot.
-        '''
-        # Contents of odometry:
-        #   frame_id: "odom"
-        #   child_frame_id: "base_footprint"
-        self._pose = odometry.pose.pose
-        self._twist = odometry.twist.twist
-
-    def _reset_time(self):
-        self._time0 = rospy.get_time()
-        return self._time0
-
-    def _query_time(self):
-        return rospy.get_time() - self._time0
+    def _setup_pose_subscriber(self):
+        if self._cfg.is_in_simulation:
+            self._sub_pose = rospy.Subscriber(
+                self._cfg.topic_get_turtle_speed_env_sim,
+                ModelStates, self._callback_sub_pose_env_sim)
+        else:
+            self._sub_pose = rospy.Subscriber(
+                self._cfg.topic_get_turtle_speed_env_real,
+                Odometry, self._callback_sub_pose_env_real)
