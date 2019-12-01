@@ -44,7 +44,7 @@ control_settings:
 
   # --------------------------------------------------
   # PID control
-  control_period: 0.01 # second
+  control_period: 0.01 # Unit: second.
 
   # Proportional control coef for linear speed.
   # Drive the robot closer to the target point.

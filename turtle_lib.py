@@ -167,6 +167,7 @@ class Turtle(object):
         If real robot, this function throws error!
         '''
         rospy.loginfo("Setting robot state...")
+        self.stop_moving()
         is_succeed = self._set_pose_for_simulation(x, y, theta)
         if not is_succeed:
             e = "Set pose failed. Setting pose only supports for simulation, not real robot!"
@@ -181,6 +182,7 @@ class Turtle(object):
         If real robot, reset the odometry and IMU data to zero.
         '''
         rospy.loginfo("Resetting robot state...")
+        self.stop_moving()
 
         # Try the resetting command for simulation.
         is_succeed = self._set_pose_for_simulation(x=0.0, y=0.0, theta=0.0)
@@ -265,7 +267,7 @@ class Turtle(object):
         The input arguments are the target pose represented in the world frame.
         '''
 
-        self._control_robot_to_reach_pose(x_goal_w, y_goal_w, theta_goal_w)
+        self._control_robot_to_pose(x_goal_w, y_goal_w, theta_goal_w)
 
         return True
 
@@ -291,7 +293,7 @@ class Turtle(object):
             theta_goal_w = None
 
         # Move.
-        self._control_robot_to_reach_pose(x_goal_w, y_goal_w, theta_goal_w)
+        self._control_robot_to_pose(x_goal_w, y_goal_w, theta_goal_w)
 
         return True
 
@@ -334,7 +336,7 @@ class Turtle(object):
         x_wg, y_wg, theta_wg = geo_maths.T_to_xytheta(T_wg)
         return x_wg, y_wg, theta_wg
 
-    def _control_robot_to_reach_pose(
+    def _control_robot_to_pose(
             self, x_goal, y_goal, theta_goal=None):
         '''
         Control the turlebot to the target pose.
